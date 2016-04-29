@@ -414,6 +414,30 @@ public class FileTransfer extends CordovaPlugin {
                     // Get a input stream of the file on the phone
                     OpenForReadResult readResult = resourceApi.openForRead(sourceUri);
 
+                    /**
+                     * https://github.com/apache/cordova-plugin-contacts
+					 * navigator.contacts.fieldType.photos
+					 *  - photo.value (content uri) not handled by 
+					 *  cordova resource api
+					 */
+					InputStream readResultInputStream = null;
+					String key = "/contacts/";
+					int isContactUri = source.indexOf(key);
+					if (isContactUri != -1) {
+						int startIndex = isContactUri + key.length();
+						int endIndex = source.lastIndexOf("/");
+						Uri uri = ContentUris.withAppendedId(
+								ContactsContract.Contacts.CONTENT_URI, Integer
+										.parseInt(source.substring(startIndex,
+												endIndex)));
+						readResultInputStream = ContactsContract.Contacts
+								.openContactPhotoInputStream(cordova
+										.getActivity().getContentResolver(),
+										uri);
+					} else {
+						readResultInputStream = readResult.inputStream;
+					}
+					
                     int stringLength = beforeDataBytes.length + tailParamsBytes.length;
                     if (readResult.length >= 0) {
                         fixedLength = (int)readResult.length;
@@ -457,12 +481,12 @@ public class FileTransfer extends CordovaPlugin {
                         }
 
                         // create a buffer of maximum size
-                        int bytesAvailable = readResult.inputStream.available();
+                        int bytesAvailable = readResultInputStream.available();
                         int bufferSize = Math.min(bytesAvailable, MAX_BUFFER_SIZE);
                         byte[] buffer = new byte[bufferSize];
 
                         // read file and write it into form...
-                        int bytesRead = readResult.inputStream.read(buffer, 0, bufferSize);
+                        int bytesRead = readResultInputStream.read(buffer, 0, bufferSize);
 
                         long prevBytesRead = 0;
                         while (bytesRead > 0) {
@@ -473,9 +497,9 @@ public class FileTransfer extends CordovaPlugin {
                                 prevBytesRead = totalBytes;
                                 Log.d(LOG_TAG, "Uploaded " + totalBytes + " of " + fixedLength + " bytes");
                             }
-                            bytesAvailable = readResult.inputStream.available();
+                            bytesAvailable = readResultInputStream.available();
                             bufferSize = Math.min(bytesAvailable, MAX_BUFFER_SIZE);
-                            bytesRead = readResult.inputStream.read(buffer, 0, bufferSize);
+                            bytesRead = readResultInputStream.read(buffer, 0, bufferSize);
 
                             // Send a progress event.
                             progress.setLoaded(totalBytes);
@@ -491,7 +515,7 @@ public class FileTransfer extends CordovaPlugin {
                         }
                         sendStream.flush();
                     } finally {
-                        safeClose(readResult.inputStream);
+                        safeClose(readResultInputStream);
                         safeClose(sendStream);
                     }
                     synchronized (context) {
